@@ -1,5 +1,5 @@
 const char INTL_LANG[] = "DE";
-const char INTL_FEINSTAUBSENSOR[] PROGMEM = "Feinstaubsensor";
+const char INTL_FEINSTAUBSENSOR[] PROGMEM = "Feinstaubsensor Custom";
 const char INTL_KONFIGURATION[] PROGMEM = "Konfiguration";
 const char INTL_WLAN_DATEN[] PROGMEM = "WLAN Daten";
 const char INTL_SPRACHE[] PROGMEM = "Sprache";
