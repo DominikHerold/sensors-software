@@ -266,7 +266,6 @@ bool send_failed = false;
 
 unsigned long last_update_attempt;
 const unsigned long pause_between_update_attempts = 86400000;
-bool will_check_for_update = false;
 
 int sds_pm10_sum = 0;
 int sds_pm25_sum = 0;
@@ -1862,7 +1861,7 @@ String sensorSDS() {
 		last_value_SDS_P1.remove(last_value_SDS_P1.length()-1);
 		last_value_SDS_P2.remove(last_value_SDS_P2.length()-1);
 		sds_pm10_sum = 0; sds_pm25_sum = 0; sds_val_count = 0;
-		if ((sending_intervall_ms > (warmup_time_SDS_ms + reading_time_SDS_ms)) && (! will_check_for_update)) {
+		if (sending_intervall_ms > (warmup_time_SDS_ms + reading_time_SDS_ms)) {
 			stop_SDS();
 		}
 	}
@@ -2044,43 +2043,6 @@ String sensorGPS() {
 }
 
 /*****************************************************************
-/* AutoUpdate                                                    *
-/*****************************************************************/
-void autoUpdate() {
-#if defined(ESP8266)
-	String SDS_version = "";
-	if (auto_update) {
-		debug_out(F("Starting OTA update ..."),DEBUG_MIN_INFO,1);
-		debug_out(F("NodeMCU firmware : "),DEBUG_MIN_INFO,0);
-		debug_out(String(SOFTWARE_VERSION),DEBUG_MIN_INFO,1);
-		debug_out(String(update_host),DEBUG_MED_INFO,1);
-		debug_out(String(update_url),DEBUG_MED_INFO,1);
-		
-		if (sds_read) { SDS_version = SDS_version_date();}
-		//SDS_version = "999";
-		display_debug(F("Looking for OTA update"));
-		last_update_attempt = millis();
-		t_httpUpdate_return ret = ESPhttpUpdate.update(update_host, update_port, update_url, String(SOFTWARE_VERSION)+String(" ")+esp_chipid+String(" ")+SDS_version+String(" ")+String(current_lang)+String(" ")+String(INTL_LANG));
-		switch(ret) {
-			case HTTP_UPDATE_FAILED:
-					debug_out(F("[update] Update failed."),DEBUG_ERROR,0);
-					debug_out(ESPhttpUpdate.getLastErrorString().c_str(),DEBUG_ERROR,1);
-					display_debug(F("Update failed."));
-					break;
-			case HTTP_UPDATE_NO_UPDATES:
-					debug_out(F("[update] No Update."),DEBUG_MIN_INFO,1);
-					display_debug(F("No update found."));
-					break;
-			case HTTP_UPDATE_OK:
-					debug_out(F("[update] Update ok."),DEBUG_MIN_INFO,1); // may not called we reboot the ESP
-					break;
-		}
-	}
-	will_check_for_update = false;
-#endif
-}
-
-/*****************************************************************
 /* display values                                                *
 /*****************************************************************/
 void display_values(const String& value_DHT_T, const String& value_DHT_H, const String& value_BMP_T, const String& value_BMP_P, const String& value_BME280_T, const String& value_BME280_H, const String& value_BME280_P, const String& value_PPD_P1, const String& value_PPD_P2, const String& value_SDS_P1, const String& value_SDS_P2) {
@@ -2201,8 +2163,7 @@ void setup() {
 	display_debug("Connecting to "+String(wlanssid));
 	connectWifi();						// Start ConnectWifi
 	display_debug(F("Writing config to SPIFFS"));
-	writeConfig();
-	autoUpdate();
+	writeConfig();	
 	create_basic_auth_strings();
 	serialSDS.begin(9600);
 	serialGPS.begin(9600);
@@ -2495,11 +2456,7 @@ void loop() {
 		}
 		data += "]}";
 
-		//sending to api(s)
-
-		if ((act_milli-last_update_attempt) > pause_between_update_attempts) {
-			will_check_for_update = true;
-		}
+		//sending to api(s)		
 
 		if (has_display) {
 			display_values(last_value_DHT_T,last_value_DHT_H,last_value_BMP_T,last_value_BMP_P,last_value_BME280_T,last_value_BME280_H,last_value_BME280_P,last_value_PPD_P1,last_value_PPD_P2,last_value_SDS_P1,last_value_SDS_P2);
@@ -2549,11 +2506,7 @@ void loop() {
 
 		if ((act_milli-last_update_attempt) > (28 * pause_between_update_attempts)) {
 			ESP.restart();
-		}
-
-		if ((act_milli-last_update_attempt) > pause_between_update_attempts) {
-			autoUpdate();
-		}
+		}		
 
 		if (! send_failed) sending_time = (4 * sending_time + sum_send_time) / 5;
 		debug_out(F("Time for sending data: "),DEBUG_MIN_INFO,0);
