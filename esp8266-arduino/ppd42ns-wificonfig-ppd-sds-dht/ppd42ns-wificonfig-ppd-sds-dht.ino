@@ -73,8 +73,6 @@
 #include <ESP8266httpUpdate.h>
 #include <WiFiClientSecure.h>
 #include <SoftwareSerial.h>
-#include <SSD1306.h>
-#include <LiquidCrystal_I2C.h>
 #include <base64.h>
 #endif
 #if defined(ARDUINO_SAMD_ZERO)
@@ -87,7 +85,6 @@
 #include <DHT.h>
 #include <Adafruit_BMP085.h>
 #include <Adafruit_BME280.h>
-#include <TinyGPS++.h>
 #include <Ticker.h>
 
 #if defined(INTL_BG)
@@ -178,14 +175,6 @@ RHReliableDatagram manager(rf69, CLIENT_ADDRESS);
 #endif
 
 /*****************************************************************
-/* Display definitions                                           *
-/*****************************************************************/
-#if defined(ESP8266)
-SSD1306   display(0x3c, D3, D4);
-LiquidCrystal_I2C lcd(0x3F,16,2);
-#endif
-
-/*****************************************************************
 /* SDS011 declarations                                           *
 /*****************************************************************/
 #if defined(ESP8266)
@@ -209,13 +198,6 @@ Adafruit_BMP085 bmp;
 /* BME280 declaration                                            *
 /*****************************************************************/
 Adafruit_BME280 bme280;
-
-/*****************************************************************
-/* GPS declaration                                               *
-/*****************************************************************/
-#if defined(ARDUINO_SAMD_ZERO) || defined(ESP8266)
-TinyGPSPlus gps;
-#endif
 
 /*****************************************************************
 /* Variable Definitions for PPD24NS                              *
@@ -321,25 +303,6 @@ void debug_out(const String& text, const int level, const bool linebreak) {
 			Serial.print(text);
 		}
 	}
-}
-
-/*****************************************************************
-/* display values                                                *
-/*****************************************************************/
-void display_debug(const String& text) {
-#if defined(ESP8266)
-	if (has_display) {
-		debug_out(F("output debug text to display..."),DEBUG_MIN_INFO,1);
-		debug_out(text,DEBUG_MAX_INFO,1);
-		display.resetDisplay();
-		display.clear();
-		display.displayOn();
-		display.setFont(Monospaced_plain_9);
-		display.setTextAlignment(TEXT_ALIGN_LEFT);
-		display.drawStringMaxWidth(0,12,120,text);
-		display.display();
-	}
-#endif
 }
 
 /*****************************************************************
@@ -1412,8 +1375,7 @@ void connectWifi() {
 		retry_count++;
 	}
 	debug_out("",DEBUG_MIN_INFO,1);
-	if (WiFi.status() != WL_CONNECTED) {
-		display_debug("AP ID: Feinstaubsensor-"+esp_chipid+" - IP: 192.168.4.1");
+	if (WiFi.status() != WL_CONNECTED) {		
 		wifiConfig();
 		if (WiFi.status() != WL_CONNECTED) {
 			retry_count = 0;
@@ -1955,177 +1917,6 @@ String sensorPPD() {
 }
 
 /*****************************************************************
-/* read GPS sensor values                                        *
-/*****************************************************************/
-String sensorGPS() {
-	String s = "";
-#if defined(ARDUINO_SAMD_ZERO) || defined(ESP8266)
-	String gps_lat = "";
-	String gps_lng = "";
-	String gps_alt = "";
-	String gps_date = "";
-	String gps_time = "";
-
-	debug_out(F("Start reading GPS"),DEBUG_MED_INFO,1);
-
-	while (serialGPS.available() > 0) {
-		if (gps.encode(serialGPS.read())) {
-			if (gps.location.isValid()) {
-				last_gps_lat = String(gps.location.lat(),6);
-				last_gps_lng = String(gps.location.lng(),6);
-			} else {
-				debug_out(F("Lat/Lng INVALID"),DEBUG_MAX_INFO,1);
-			}
-			if (gps.altitude.isValid()) {
-				last_gps_alt = String(gps.altitude.meters(),2);
-			} else {
-				debug_out(F("Altitude INVALID"),DEBUG_MAX_INFO,1);
-			}
-			if (gps.date.isValid()) {
-				gps_date = "";
-				if (gps.date.month() < 10) gps_date += "0";
-				gps_date += String(gps.date.month());
-				gps_date += "/";
-				if (gps.date.day() < 10) gps_date += "0";
-				gps_date += String(gps.date.day());
-				gps_date += "/";
-				gps_date += String(gps.date.year());
-				last_gps_date = gps_date;
-			} else {
-				debug_out(F("Date INVALID"),DEBUG_MAX_INFO,1);
-			}
-			if (gps.time.isValid()) {
-				gps_time = "";
-				if (gps.time.hour() < 10) gps_time += "0";
-				gps_time += String(gps.time.hour());
-				gps_time += ":";
-				if (gps.time.minute() < 10) gps_time += "0";
-				gps_time += String(gps.time.minute());
-				gps_time += ":";
-				if (gps.time.second() < 10) gps_time += "0";
-				gps_time += String(gps.time.second());
-				gps_time += ".";
-				if (gps.time.centisecond() < 10) gps_time += "0";
-				gps_time += String(gps.time.centisecond());
-				last_gps_time = gps_time;
-			} else {
-				debug_out(F("Time: INVALID"),DEBUG_MAX_INFO,1);
-			}
-		}
-	}
-
-	if (send_now) {
-		debug_out("Lat/Lng: "+last_gps_lat+","+last_gps_lng,DEBUG_MIN_INFO,1);
-		debug_out("Altitude: "+last_gps_alt,DEBUG_MIN_INFO,1);
-		debug_out("Date: "+last_gps_date,DEBUG_MIN_INFO,1);
-		debug_out("Time "+last_gps_time,DEBUG_MIN_INFO,1);
-		debug_out("------",DEBUG_MIN_INFO,1);
-		s += Value2Json(F("GPS_lat"),last_gps_lat);
-		s += Value2Json(F("GPS_lon"),last_gps_lng);
-		s += Value2Json(F("GPS_height"),last_gps_alt);
-		s += Value2Json(F("GPS_date"),last_gps_date);
-		s += Value2Json(F("GPS_time"),last_gps_time);
-		last_gps_lat = "";
-		last_gps_lng = "";
-		last_gps_alt = "";
-		last_gps_date = "";
-		last_gps_time = "";
-	}
-
-	if ( gps.charsProcessed() < 10) {
-		debug_out(F("No GPS data received: check wiring"),DEBUG_ERROR,1);
-	}
-
-	debug_out(F("End reading GPS"),DEBUG_MED_INFO,1);
-
-#endif
-	return s;
-}
-
-/*****************************************************************
-/* display values                                                *
-/*****************************************************************/
-void display_values(const String& value_DHT_T, const String& value_DHT_H, const String& value_BMP_T, const String& value_BMP_P, const String& value_BME280_T, const String& value_BME280_H, const String& value_BME280_P, const String& value_PPD_P1, const String& value_PPD_P2, const String& value_SDS_P1, const String& value_SDS_P2) {
-#if defined(ESP8266)
-	int value_count = 0;
-	String t_value = "";
-	String h_value = "";
-	String p_value = "";
-	String t_sensor = "";
-	String h_sensor = "";
-	String p_sensor = "";
-	debug_out(F("output values to display..."),DEBUG_MIN_INFO,1);
-	if (dht_read) {
-		t_value = value_DHT_T; t_sensor = "DHT22";
-		h_value = value_DHT_H; h_sensor = "DHT22";
-	}
-	if (bmp_read) {
-		t_value = value_BMP_T; t_sensor = "BMP180";
-		p_value = value_BMP_P; p_sensor = "BMP180";
-	}
-	if (bme280_read) {
-		t_value = value_BME280_T; t_sensor = "BME280";
-		h_value = value_BME280_H; h_sensor = "BME280";
-		p_value = value_BME280_P; p_sensor = "BME280";
-	}
-	if (has_display) {
-		display.resetDisplay();
-		display.clear();
-		display.displayOn();
-		display.setFont(Monospaced_plain_9);
-		display.setTextAlignment(TEXT_ALIGN_LEFT);
-		value_count = 0;
-		display.drawString(0,10*(value_count++),"Temp:"+t_value+"  Hum.:"+h_value);
-		if (ppd_read) {
-			display.drawString(0,10*(value_count++),"PPD P1: "+value_PPD_P1);
-			display.drawString(0,10*(value_count++),"PPD P2: "+value_PPD_P2);
-		}
-		if (sds_read) {
-			display.drawString(0,10*(value_count++),"SDS P1: "+value_SDS_P1);
-			display.drawString(0,10*(value_count++),"SDS P2: "+value_SDS_P2);
-		}
-		if (gps_read) {
-			if(gps.location.isValid()) {
-				display.drawString(0,10*(value_count++),"lat: "+String(gps.location.lat(),6));
-				display.drawString(0,10*(value_count++),"long: "+String(gps.location.lng(),6));
-			}
-			display.drawString(0,10*(value_count++),"satelites: "+String(gps.satellites.value()));
-		}
-		display.display();
-	}
-	if (has_lcd1602) {
-		lcd.clear();
-		lcd.setCursor(0,0);
-		lcd.print("PM: "+value_SDS_P1+" "+value_SDS_P2);
-		lcd.setCursor(0,1);
-		lcd.print("T/H:"+t_value+char(223)+"C "+h_value+"%");
-	}
-	yield();
-#endif
-}
-
-/*****************************************************************
-/* Init display                                                  *
-/*****************************************************************/
-void init_display() {
-#if defined(ESP8266)
-	display.init();
-	display.resetDisplay();
-#endif
-}
-
-/*****************************************************************
-/* Init display                                                  *
-/*****************************************************************/
-void init_lcd1602() {
-#if defined(ESP8266)
-	lcd.init();
-	lcd.backlight();
-#endif
-}
-
-
-/*****************************************************************
 /* Init BME280                                                   *
 /*****************************************************************/
 bool initBME280(char addr) {
@@ -2153,16 +1944,11 @@ void setup() {
 #endif
 #if defined(ARDUINO_SAMD_ZERO)
 	Wire.begin();
-#endif
-	init_display();
-	init_lcd1602();
-	copyExtDef();
-	display_debug(F("Reading config from SPIFFS"));
+#endif	
+	copyExtDef();	
 	readConfig();
-	setup_webserver();
-	display_debug("Connecting to "+String(wlanssid));
-	connectWifi();						// Start ConnectWifi
-	display_debug(F("Writing config to SPIFFS"));
+	setup_webserver();	
+	connectWifi();						// Start ConnectWifi	
 	writeConfig();	
 	create_basic_auth_strings();
 	serialSDS.begin(9600);
@@ -2303,26 +2089,7 @@ void loop() {
 			debug_out(F("Call sensorBME280"),DEBUG_MAX_INFO,1);
 			result_BME280 = sensorBME280();			// getting temperature and humidity (optional)
 		}
-	}
-
-	if (gps_read && (((act_milli-starttime_GPS) > sampletime_GPS_ms) || ((act_milli-starttime) > sending_intervall_ms))) {
-		debug_out(F("Call sensorGPS"),DEBUG_MAX_INFO,1);
-		result_GPS = sensorGPS();			// getting GPS coordinates
-		starttime_GPS = act_milli;
-	}
-
-	if (has_display) {
-		if ((act_milli-display_last_update) > display_update_interval) {
-			if (sds_read) {
-				last_value_SDS_P1 = Float2String(float(sds_display_values_10[0]+sds_display_values_10[1]+sds_display_values_10[2]+sds_display_values_10[3]+sds_display_values_10[4])/50.0);
-				last_value_SDS_P2 = Float2String(float(sds_display_values_25[0]+sds_display_values_25[1]+sds_display_values_25[2]+sds_display_values_25[3]+sds_display_values_25[4])/50.0);
-				last_value_SDS_P1.remove(last_value_SDS_P1.length()-1);
-				last_value_SDS_P2.remove(last_value_SDS_P2.length()-1);
-			}
-			display_values(last_value_DHT_T,last_value_DHT_H,last_value_BMP_T,last_value_BMP_P,last_value_BME280_T,last_value_BME280_H,last_value_BME280_P,last_value_PPD_P1,last_value_PPD_P2,last_value_SDS_P1,last_value_SDS_P2);
-			display_last_update = act_milli;
-		}
-	}
+	}		
 
 	if (send_now) {
 		if (WiFi.psk() != "") {
@@ -2456,11 +2223,7 @@ void loop() {
 		}
 		data += "]}";
 
-		//sending to api(s)		
-
-		if (has_display) {
-			display_values(last_value_DHT_T,last_value_DHT_H,last_value_BMP_T,last_value_BMP_P,last_value_BME280_T,last_value_BME280_H,last_value_BME280_P,last_value_PPD_P1,last_value_PPD_P2,last_value_SDS_P1,last_value_SDS_P2);
-		}
+		//sending to api(s)				
 
 		if (send2madavi) {
 			debug_out(F("## Sending to madavi.de: "),DEBUG_MIN_INFO,1);
